@@ -1,6 +1,7 @@
 library(rlang)
 library(magrittr)
 library(googledrive)
+library(evaluate)
 library(future) #  for asynchronous task evaluation
 
 #################### CONFIGURATION ----------
@@ -9,7 +10,7 @@ configs <- list()
 configs$drive_task_dir <- "remete_tasks/"
 configs$drive_results_dir <- "remete_results/"
 configs$tmpdir <- "~/tmp/"
-configs$timeout <- 5
+configs$timeout <- 1
 dir.create(configs$tmpdir)
 
 #################### CLIENT ----------
@@ -102,7 +103,7 @@ eval_task_obj <- function(obj) {
   tmpenv <- obj$objslist
   attach(tmpenv)
   ftrobj <- future(eval(obj$x), packages = obj$libs)
-  list(task_id = obj$task_id, output_value = value(ftrobj))
+  list(task_id = obj$task_id, output_value = value(ftrobj, signal = F))
 }
 
 save_results_package <- function(results_obj, result_pkg_path) {saveRDS(results_obj, file = result_pkg_path)}
@@ -112,6 +113,5 @@ remete_server_session()
 a = sample(1:100, size = 40)
 b = sample(1:100, size = 40)
 
-kimeneti_objektum <- send_to_remote(rcorr(a, c), objs = c("a", "b"), libs = c("Hmisc"))
-send_to_remote(x = beep(1), libs = c("beepr"))
-send_to_remote(x = beep(1), libs = c("beepr"))
+kimeneti_objektum <- send_to_remote(rcorr(a, b), objs = c("a", "b"), libs = c("Hmisc"))
+

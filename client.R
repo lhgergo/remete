@@ -1,4 +1,5 @@
 library(rlang)
+library(callr)
 library(magrittr)
 library(googledrive)
 library(evaluate)
@@ -35,7 +36,9 @@ send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL, interfac
     if(outobj$task_id %in% resfiles_in_cloud) {
       call2(interface, "get_result") %>% eval()
       call2(interface, "remove_result", obj = outobj) %>% eval()
-      return(readRDS(paste0(configs$tmpdir, "/", outobj$task_id))$output_value)
+      
+      resobj <- readRDS(paste0(configs$tmpdir, "/", outobj$task_id))
+      if(!is.null(resobj$errors)) {return(stop(resobj$errors))} else {return(resobj$output_value)}
     }
   }
 }
@@ -43,7 +46,8 @@ send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL, interfac
 
 #################### INTERFACE ----------
 # interface_gdrive: all in one function for communication with Google Drive.
-interface_gdrive <- function(cmd, obj = NULL) {
+interface_gdrive <- function(cmd, obj = NULL, task_id = NULL) {
+  require(googledrive)
   if(cmd == "send_task") {
     tmppath <- paste0(configs$tmpdir, "/", obj$task_id)
     saveRDS(obj, file = tmppath)
@@ -61,8 +65,7 @@ interface_gdrive <- function(cmd, obj = NULL) {
     return(drive_download(file = newest_task_pkg[1, ], path = paste0(configs$tmpdir, "/", as.vector(newest_task_pkg[1, 1])), overwrite = TRUE))
   }
   if(cmd == "send_result") {
-    tmppath <- paste0(configs$tmpdir, "/", paste0(obj$task_id))
-    saveRDS(obj, file = tmppath)
+    tmppath <- paste0(configs$tmpdir, "/", task_id)
     return(drive_upload(media = tmppath, path = configs$drive_results_dir))
   }
   if(cmd == "get_result") {
@@ -82,28 +85,50 @@ interface_gdrive <- function(cmd, obj = NULL) {
 # remete_server_session: the main function orchestrating remete tasks
 # assign_task: loading 
 remete_server_session <- function() {
-  keep_checking <- TRUE
+  new_tasks_appeared <- FALSE
+  ongoing_tasks <- NULL
+  
   while(TRUE) {
-    if(keep_checking) {
-      print(paste0(Sys.time(), ' - Checking for new task...'))
+    if(!new_tasks_appeared) {
+      print(paste0(Sys.time(), ' - Checking for new task or result...'))
       Sys.sleep(configs$timeout)
-      keep_checking <- !interface_gdrive("check_tasks")
+      new_tasks_appeared <- interface_gdrive("check_tasks")
+      
+      new_results <- intersect(list.files(configs$tmpdir), ongoing_tasks)
+      if(length(new_results) > 0) {
+        interface_gdrive("send_result", task_id = new_results[1])
+        ongoing_tasks <- ongoing_tasks[-which(ongoing_tasks == new_results[1])]
+      }
     } else {
+      # getting and loading task obj, and removing RDS file
       task_pkg_info <- interface_gdrive("get_task")
       task_obj <- readRDS(file = task_pkg_info[1, 2][[1]])
-      results_obj <- eval_task_obj(task_obj)
-      interface_gdrive("send_result", obj = results_obj)
+      file.remove(task_pkg_info[1, 2][[1]])
+      
+      # adding configs to task_obj, so r subprocess can read information from it
+      task_obj$configs <- configs
+
+      # evaluating task obj
+      ongoing_tasks <- c(ongoing_tasks, task_obj$task_id)
+      procobj <- r_bg(eval_task_obj, args = list(task_obj))
+      
+      
+      # remove task object from Google Drive
       interface_gdrive("remove_task", obj = task_obj)
-      keep_checking <- TRUE
+      
+      # turn on "keep checking" again
+      new_tasks_appeared <- FALSE
     }
   }
 }
 
-eval_task_obj <- function(obj) {
-  tmpenv <- obj$objslist
-  attach(tmpenv)
-  ftrobj <- future(eval(obj$x), packages = obj$libs)
-  list(task_id = obj$task_id, output_value = value(ftrobj, signal = F))
+eval_task_obj <- function(task_obj) {
+  lapply(task_obj$libs, library, character.only = TRUE)
+  attach(task_obj$objslist)
+  configs <- task_obj$configs
+  results_obj <- list(task_id = task_obj$task_id,
+                      output_value = evaluate::evaluate(task_obj$x,output_handler = evaluate::new_output_handler(value = identity))[[2]])
+  saveRDS(results_obj, file = paste0(configs$tmpdir, "/", results_obj$task_id))
 }
 
 save_results_package <- function(results_obj, result_pkg_path) {saveRDS(results_obj, file = result_pkg_path)}
@@ -113,5 +138,19 @@ remete_server_session()
 a = sample(1:100, size = 40)
 b = sample(1:100, size = 40)
 
-kimeneti_objektum <- send_to_remote(rcorr(a, b), objs = c("a", "b"), libs = c("Hmisc"))
+send_to_remote({
+  # require(Hmisc, quietly = TRUE)
+  a = 1:100
+  b = 1:100
+  Hmisc::rcorr(a, b)
+})
 
+evaluate({
+  require(Hmisc)
+  a = 1:100
+  b = 1:100
+  rcorr(a, b)
+}, output_handler = new_output_handler(value = identity))
+
+kimeneti_objektum_1 <- send_to_remote(rcorr(a, b), objs = c("a", "b"), libs = c("Hmisc"))
+kimeneti_objektum_2 <- send_to_remote(rcorr(a, d), objs = c("a", "b"), libs = c("Hmisc"))

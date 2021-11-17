@@ -19,28 +19,44 @@ dir.create(configs$tmpdir)
 # x: expression
 # objs: objects to export
 # libs: libraries to load on the remote computer
+# task_id: a pre-determined ID for the task. If NULL, generates a random ID of length 10
 # interface: interface function to be used to send data
 
-send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL, interface = "interface_gdrive") {
+send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL, 
+                           interface = "interface_gdrive", wait_for_result = TRUE) {
   task_id <- ifelse(is.null(task_id), paste0(sample(c(0:9, letters), size = 10, replace = TRUE), collapse = ""), task_id)
   x <- enexpr(x) # converting expression
   objslist = if(!is.null(objs)) as.environment(mget(objs, envir = .GlobalEnv)) # creates object environment
   outobj <- list(task_id = task_id, x = x, objslist = objslist, libs = libs) # creates task object
   call2(interface, "send_task", list(task_id = task_id, x = x, objslist = objslist, libs = libs)) %>% eval() # sending task
   
-  # waiting for response
-  responded <- FALSE
-  while(!responded) {
-    Sys.sleep(configs$timeout)
-    resfiles_in_cloud <- call2(interface, cmd = "list_result_pkgs") %>% eval()
-    if(outobj$task_id %in% resfiles_in_cloud) {
-      call2(interface, "get_result") %>% eval()
-      call2(interface, "remove_result", obj = outobj) %>% eval()
-      
-      resobj <- readRDS(paste0(configs$tmpdir, "/", outobj$task_id))
-      if(!is.null(resobj$errors)) {return(stop(resobj$errors))} else {return(resobj$output_value)}
+  if(wait_for_result) {
+    # waiting for response
+    responded <- FALSE
+    while(!responded) {
+      Sys.sleep(configs$timeout)
+      resfiles_in_cloud <- call2(interface, cmd = "list_result_pkgs") %>% eval()
+      if(outobj$task_id %in% resfiles_in_cloud) {
+        call2(interface, "get_result", task_id = task_id) %>% eval()
+        call2(interface, "remove_result", task_id = task_id) %>% eval()
+        
+        resobj <- readRDS(paste0(configs$tmpdir, "/", outobj$task_id))
+        if(!is.null(resobj$errors)) {return(stop(resobj$errors))} else {return(resobj$output_value)}
+      }
     }
+  } else {
+    # don't wait for response
+    message(paste("Task", task_id , "had been passed to the interface"))
   }
+}
+
+# load_result: downloads and loads result object from the cloud
+load_result <- function(task_id, interface, remove_from_cloud = TRUE) {
+  call2(interface, "get_result", task_id = task_id) %>% eval()
+  if(remove_from_cloud) {call2(interface, "remove_result", task_id = task_id) %>% eval()}
+  resobj <- readRDS(paste0(configs$tmpdir, "/", task_id))
+  file.remove(paste0(configs$tmpdir, "/", task_id))
+  return(resobj$output_value)
 }
 
 
@@ -69,14 +85,15 @@ interface_gdrive <- function(cmd, obj = NULL, task_id = NULL) {
     return(drive_upload(media = tmppath, path = configs$drive_results_dir))
   }
   if(cmd == "get_result") {
-    newest_result_pkg <- drive_ls(configs$drive_results_dir)[1, ]
-    return(drive_download(file = newest_result_pkg[1, ], path = paste0(configs$tmpdir, "/", as.vector(newest_result_pkg[1, 1])), overwrite = TRUE))
+    result_pkgs <- drive_ls(configs$drive_results_dir)
+    result_pkgs <- result_pkgs[which(result_pkgs$name == task_id), ]
+    return(drive_download(file = result_pkgs, path = paste0(configs$tmpdir, "/", as.vector(result_pkgs[1, 1])), overwrite = TRUE))
   }
   if(cmd == "remove_task") {
-    drive_rm(paste0(configs$drive_task_dir, obj$task_id))
+    drive_rm(paste0(configs$drive_task_dir, task_id))
   }
   if(cmd == "remove_result") {
-    drive_rm(paste0(configs$drive_results_dir, obj$task_id))
+    drive_rm(paste0(configs$drive_results_dir, task_id))
   }
 }
 
@@ -84,7 +101,7 @@ interface_gdrive <- function(cmd, obj = NULL, task_id = NULL) {
 #################### SERVER ----------
 # remete_server_session: the main function orchestrating remete tasks
 # assign_task: loading 
-remete_server_session <- function() {
+remete_server_session <- function(interface = "interface_gdrive") {
   new_tasks_appeared <- FALSE
   ongoing_tasks <- NULL
   
@@ -92,16 +109,16 @@ remete_server_session <- function() {
     if(!new_tasks_appeared) {
       print(paste0(Sys.time(), ' - Checking for new task or result...'))
       Sys.sleep(configs$timeout)
-      new_tasks_appeared <- interface_gdrive("check_tasks")
+      new_tasks_appeared <- call2(interface, "check_tasks") %>% eval() # sending task
       
       new_results <- intersect(list.files(configs$tmpdir), ongoing_tasks)
       if(length(new_results) > 0) {
-        interface_gdrive("send_result", task_id = new_results[1])
+        call2(interface, "send_result", task_id = new_results[1]) %>% eval() # sending result
         ongoing_tasks <- ongoing_tasks[-which(ongoing_tasks == new_results[1])]
       }
     } else {
       # getting and loading task obj, and removing RDS file
-      task_pkg_info <- interface_gdrive("get_task")
+      task_pkg_info <- call2(interface, "get_task") %>% eval()
       task_obj <- readRDS(file = task_pkg_info[1, 2][[1]])
       file.remove(task_pkg_info[1, 2][[1]])
       
@@ -114,7 +131,7 @@ remete_server_session <- function() {
       
       
       # remove task object from Google Drive
-      interface_gdrive("remove_task", obj = task_obj)
+      task_pkg_info <- call2(interface, "remove_task", task_id = task_obj$task_id) %>% eval()
       
       # turn on "keep checking" again
       new_tasks_appeared <- FALSE
@@ -134,23 +151,15 @@ eval_task_obj <- function(task_obj) {
 save_results_package <- function(results_obj, result_pkg_path) {saveRDS(results_obj, file = result_pkg_path)}
 
 #################### TESTING -----------
-remete_server_session()
+remete_server_session(interface = "interface_gdrive")
 a = sample(1:100, size = 40)
 b = sample(1:100, size = 40)
 
 send_to_remote({
-  # require(Hmisc, quietly = TRUE)
-  a = 1:100
-  b = 1:100
-  Hmisc::rcorr(a, b)
-})
-
-evaluate({
-  require(Hmisc)
   a = 1:100
   b = 1:100
   rcorr(a, b)
-}, output_handler = new_output_handler(value = identity))
+}, libs = c("Hmisc"))
 
-kimeneti_objektum_1 <- send_to_remote(rcorr(a, b), objs = c("a", "b"), libs = c("Hmisc"))
-kimeneti_objektum_2 <- send_to_remote(rcorr(a, d), objs = c("a", "b"), libs = c("Hmisc"))
+kimeneti_objektum_1 <- send_to_remote(rcorr(a, b), objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = FALSE)
+load_result("js4ugyb7kk", "interface_gdrive", remove_from_cloud = FALSE)

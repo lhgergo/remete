@@ -123,7 +123,7 @@ remete_server_session <- function(interface = "interface_gdrive") {
       if(length(new_result_objs) > 0) {
         new_result_obj <- new_result_objs[1]
         keep_new_result_in_cloud <- ongoing_tasks$keep_in_cloud[ongoing_tasks$task_id == new_result_obj]
-        eval(call2(interface, "send_result", task_id = new_result_obj)) # sending result
+        eval(rlang::call2(interface, "send_result", task_id = new_result_obj)) # sending result
 
         if(keep_new_result_in_cloud) {
           ongoing_tasks[ongoing_tasks$task_id == new_result_obj, "status"] <- "uploaded to cloud"

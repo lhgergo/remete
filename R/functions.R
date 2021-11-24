@@ -6,9 +6,9 @@
 # configs_remete$drive_ongoing_task_query_dir <- "remete_ongoing_task_query/"
 # configs_remete$tmpdir <- "~/tmp/"
 # configs_remete$timeout <- 1
-# rjson::toJSON(configs_remete, indent = 1) %>% write("~/remte_configs.json")
+# rjson::toJSON(configs_remete, indent = 1) %>% write("~/remete_configs.json")
 
-configs_remete <- rjson::fromJSON(file = "~/remte_configs.json")
+configs_remete <- rjson::fromJSON(file = "~/remete_configs.json")
 if(!file.exists(configs_remete$tmpdir)) dir.create(configs_remete$tmpdir)
 
 #################### CLIENT ----------

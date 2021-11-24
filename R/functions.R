@@ -1,3 +1,12 @@
+require(rlang)
+require(callr)
+require(magrittr)
+require(googledrive)
+require(evaluate)
+require(tibble)
+require(rjson)
+require(future)
+
 #################### CONFIGURATION ----------
 # This should be stored somehow in a file. Finally I saved it into a json.
 # configs_remete <- list()

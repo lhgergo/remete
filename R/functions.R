@@ -166,7 +166,7 @@ remete_server_session <- function(interface = "interface_gdrive") {
       }
 
       # remove task object from Google Drive
-      eval(call2(interface, "remove_task", task_id = task_obj$task_id))
+      eval(rcall::call2(interface, "remove_task", task_id = task_obj$task_id))
 
       # turn on "keep checking" again
       standby_mode <- TRUE

@@ -162,8 +162,7 @@ remete_server_session <- function(interface = "interface_gdrive") {
                                                            keep_in_cloud = task_obj$keep_in_cloud))
 
       # is it containing a remete command object?
-      if(class(task_obj$x) == "call") {
-
+      if(class(task_obj$x) == "call" | class(task_obj$x) == "{") {
         # adding configs_remete to task_obj, so r subprocess can read information from it
         task_obj$configs_remete <- configs_remete
 

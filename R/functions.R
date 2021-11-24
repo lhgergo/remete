@@ -8,7 +8,7 @@ library(rjson)
 library(future) #  for asynchronous task evaluation
 
 #################### CONFIGURATION ----------
-# This should be stored somehow in a file. For now I will just keep them here.
+# This should be stored somehow in a file. Finally I saved it into a json.
 # configs_remete <- list()
 # configs_remete$drive_task_dir <- "remete_tasks/"
 # configs_remete$drive_results_dir <- "remete_results/"
@@ -30,14 +30,14 @@ if(!file.exists(configs$tmpdir)) dir.create(configs_remete$tmpdir)
 # wait_for_result: if TRUE, reserves the client R session until the retrival of the results
 # configs: the user can optionally define a different configuration for the function (eg. send the task to another computer)
 
-send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL, 
+send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL,
                            interface = "interface_gdrive", wait_for_result = TRUE) {
   task_id <- ifelse(is.null(task_id), paste0(sample(c(0:9, letters), size = 10, replace = TRUE), collapse = ""), task_id)
   x <- enexpr(x) # converting expression
   objslist = if(!is.null(objs)) as.environment(mget(objs, envir = .GlobalEnv)) # creates object environment
   outobj <- list(task_id = task_id, x = x, objslist = objslist, libs = libs) # creates task object
   call2(interface, "send_task", list(task_id = task_id, x = x, objslist = objslist, libs = libs, keep_in_cloud = !wait_for_result)) %>% eval() # sending task
-  
+
   if(wait_for_result) {
     # waiting for response
     responded <- FALSE
@@ -47,7 +47,7 @@ send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL,
       if(outobj$task_id %in% resfiles_in_cloud) {
         call2(interface, "get_result", task_id = task_id) %>% eval()
         call2(interface, "remove_result", task_id = task_id) %>% eval()
-        
+
         resobj <- readRDS(paste0(configs_remete$tmpdir, "/", outobj$task_id))
         if(!is.null(resobj$errors)) {return(stop(resobj$errors))} else {return(resobj$output_value)}
       }
@@ -110,17 +110,17 @@ interface_gdrive <- function(cmd, obj = NULL, task_id = NULL) {
 
 #################### SERVER ----------
 # remete_server_session: the main function orchestrating remete tasks
-# assign_task: loading 
+# assign_task: loading
 remete_server_session <- function(interface = "interface_gdrive") {
-  
-  # setting some variables in advance 
+
+  # setting some variables in advance
   standby_mode <- TRUE
   ongoing_tasks <- tibble(task_id = vector(mode = "character"),
                           x = list(),
                           starttime = vector() %>% as.POSIXct(),
                           status = vector(mode = "character"),
                           keep_in_cloud = vector(mode = "logical"))
-  
+
   while(TRUE) { # run continuously
     if(standby_mode) { # if there is nothing to evaluate
       # print(paste0(Sys.time(), ' - Checking for new task or result...'))
@@ -128,14 +128,14 @@ remete_server_session <- function(interface = "interface_gdrive") {
       Sys.sleep(configs_remete$timeout)
       new_tasks_appeared <- call2(interface, "check_tasks") %>% eval() # checking if new task is available
       standby_mode <- !new_tasks_appeared
-      
+
       # any new results? if yes, pass it to the interface!
       new_result_objs <- intersect(list.files(configs_remete$tmpdir), ongoing_tasks$task_id[ongoing_tasks$status != "uploaded to cloud"])
       if(length(new_result_objs) > 0) {
         new_result_obj <- new_result_objs[1]
         keep_new_result_in_cloud <- ongoing_tasks$keep_in_cloud[ongoing_tasks$task_id == new_result_obj]
         call2(interface, "send_result", task_id = new_result_obj) %>% eval() # sending result
-        
+
         if(keep_new_result_in_cloud) {
           ongoing_tasks[ongoing_tasks$task_id == new_result_obj, "status"] <- "uploaded to cloud"
         } else {
@@ -143,42 +143,42 @@ remete_server_session <- function(interface = "interface_gdrive") {
           ongoing_tasks <- ongoing_tasks[-which(ongoing_tasks$task_id == new_result_obj[1]), ]
         }
       }
-      
+
       # if there is any task that was kept in cloud, remove it if it had been downloaded
       if(any(ongoing_tasks$keep_in_cloud)) {
         result_pkg_already_downloaded <- which(ongoing_tasks$keep_in_cloud & !ongoing_tasks$task_id %in% interface_gdrive("list_result_pkgs"))
         if(length(result_pkg_already_downloaded) > 0) ongoing_tasks <- ongoing_tasks[-result_pkg_already_downloaded, ]
       }
-      
+
     # if we have a task to be evaluated
     } else {
       # getting and loading task obj, and removing RDS file
       task_pkg_info <- call2(interface, "get_task") %>% eval()
       task_obj <- readRDS(file = task_pkg_info[1, 2][[1]])
       file.remove(task_pkg_info[1, 2][[1]])
-      
+
       ongoing_tasks <- rbind(ongoing_tasks, tibble(task_id = task_obj$task_id,
                                                    x = list(task_obj$x),
                                                    starttime = Sys.time(),
                                                    status = "in progress",
                                                    keep_in_cloud = task_obj$keep_in_cloud))
-      
+
       # is it containing a remete command object?
       if(class(task_obj$x) == "call") {
-        
+
         # adding configs_remete to task_obj, so r subprocess can read information from it
         task_obj$configs_remete <- configs_remete
-        
+
         # evaluating task obj
         procobj <- r_bg(eval_task_obj, args = list(task_obj))
-        
+
       } else if (class(task_obj$x) == "character") {
         run_server_command(task_obj$x, task_obj)
       }
-      
+
       # remove task object from Google Drive
       call2(interface, "remove_task", task_id = task_obj$task_id) %>% eval()
-      
+
       # turn on "keep checking" again
       standby_mode <- TRUE
     }
@@ -215,44 +215,44 @@ run_server_command <- function(x, task_obj) {
 }
 
 # #################### TESTING -----------
-remete_server_session(interface = "interface_gdrive")
-a = sample(1:100, size = 40)
-b = sample(1:100, size = 40)
-
-out <- send_to_remote(rcorr(a, b, type = "spearman"), objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = FALSE)
-
-crnt_tasks <- send_to_remote("show_ongoing_tasks")
+# remete_server_session(interface = "interface_gdrive")
+# a = sample(1:100, size = 40)
+# b = sample(1:100, size = 40)
+#
+# out <- send_to_remote(rcorr(a, b, type = "spearman"), objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = FALSE)
+#
+# crnt_tasks <- send_to_remote("show_ongoing_tasks")
 
 
 # replace tibble-based ongoing tasks with an object!!!
 
 
 
-# 
-# 
+#
+#
 # kimeneti_objektum_1 <- send_to_remote(rcorr(a, b), objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = FALSE)
 # load_result("js4ugyb7kk", "interface_gdrive", remove_from_cloud = FALSE)
-# 
-# 
+#
+#
 # ############### trying out a netmhcpan run
 # list.files("~/Dokumentumok/LABOR/SARS-CoV-2-immunoadaptation/netMHCpan-tools_functions/", full.names = TRUE) %>%
 #   extract(!grepl("db_playground", .)) %>% lapply(source)
-# 
+#
 # list.files("~/Dokumentumok/LABOR/SARS-CoV-2-immunoadaptation/netMHCpan-tools_functions/", full.names = TRUE) %>%
 #   extract(!grepl("db_playground", .)) %>% lapply(function(flnm) {
 #     x <- readLines(flnm)
 #     x[substr(x, 1, 7) == "library"] %>% gsub("library\\(", "", .) %>% gsub("\\)", "", .)
 #   }) %>% unlist()
-# 
+#
 # fnctns <- lsf.str() %>% as.vector()
 # peptides <- purrr::map_chr(1:1000, ~sample(rownames(protr::AABLOSUM100), 9, replace = TRUE) %>% paste0(collapse = ""))
 # alleles <- readLines("../SARS-CoV-2-immunoadaptation_data/alleles.txt")[1:32]
-# 
+#
 # recogn_matrix_rp <- send_to_remote(x = RunNetMHCpan4.0(alleles = alleles,
 #                                                        peptides = peptides,
 #                                                        type = "rp",
 #                                                        output_format = "wide",
 #                                                        threads = 32),
 #                objs = c(fnctns, "amino_acids", "peptides", "alleles", "configs"), libs = c("magrittr", "reshape2", "furrr", "parallel"))
-# 
+#
 

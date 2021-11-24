@@ -24,7 +24,7 @@ if(!file.exists(configs_remete$tmpdir)) dir.create(configs_remete$tmpdir)
 send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL,
                            interface = "interface_gdrive", wait_for_result = TRUE) {
   task_id <- ifelse(is.null(task_id), paste0(sample(c(0:9, letters), size = 10, replace = TRUE), collapse = ""), task_id)
-  x <- enexpr(x) # converting expression
+  x <- rlang::enexpr(x) # converting expression
   objslist = if(!is.null(objs)) as.environment(mget(objs, envir = .GlobalEnv)) # creates object environment
   outobj <- list(task_id = task_id, x = x, objslist = objslist, libs = libs) # creates task object
   eval(rlang::call2(interface, "send_task", list(task_id = task_id, x = x, objslist = objslist, libs = libs, keep_in_cloud = !wait_for_result))) # sending task

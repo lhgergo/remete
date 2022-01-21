@@ -183,7 +183,7 @@ remete_server_session <- function(interface = "interface_gdrive") {
 }
 
 eval_task_obj <- function(task_obj) {
-  lapply(task_obj$libs, library, character.only = TRUE)
+  lapply(task_obj$libs, function(x) {library(x, logical.return = TRUE, character.only = TRUE)})
   attach(task_obj$objslist)
   configs_remete <- task_obj$configs_remete
   results_obj <- list(task_id = task_obj$task_id,

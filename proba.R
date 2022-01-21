@@ -9,6 +9,8 @@ b = sample(1:100, size = 40)
 out <- send_to_remote({rcorr(a, b, type = "spearman")}, objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = TRUE)
 out2 <- send_to_remote({rcorr(a, b, type = "spearman")}, objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = FALSE)
 
+out_err <- send_to_remote({rcorr(a, b, type = "spearman")}, objs = c("a", "b"), libs = c("Hmiss"), wait_for_result = TRUE)
+
 runningdf <- send_to_remote("show_ongoing_tasks")
 load_result("2umaacdooj")
 

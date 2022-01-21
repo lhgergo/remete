@@ -49,7 +49,7 @@ send_to_remote <- function(x, objs = NULL, libs = NULL, task_id = NULL,
         eval(rlang::call2(interface, "remove_result", task_id = task_id))
 
         resobj <- readRDS(paste0(configs_remete$tmpdir, "/", outobj$task_id))
-        if(!is.null(resobj$errors)) {return(stop(resobj$errors))} else {return(resobj$output_value)}
+        return(resobj$output_value)
       }
     }
   } else {
@@ -132,7 +132,7 @@ remete_server_session <- function(interface = "interface_gdrive") {
       if(length(new_result_objs) > 0) {
         new_result_obj <- new_result_objs[1]
         keep_new_result_in_cloud <- ongoing_tasks$keep_in_cloud[ongoing_tasks$task_id == new_result_obj]
-        eval(rlang::call2(interface, "send_result", task_id = new_result_obj)) # sending result
+        eval(rlang::call2(interface, "send_result", task_id = new_result_obj)) # sending result to cloud
 
         if(keep_new_result_in_cloud) {
           ongoing_tasks[ongoing_tasks$task_id == new_result_obj, "status"] <- "uploaded to cloud"
@@ -148,7 +148,7 @@ remete_server_session <- function(interface = "interface_gdrive") {
         if(length(result_pkg_already_downloaded) > 0) ongoing_tasks <- ongoing_tasks[-result_pkg_already_downloaded, ]
       }
 
-    # if we have a task to be evaluated
+      # if we have a task to be evaluated
     } else {
       # getting and loading task obj, and removing RDS file
       task_pkg_info <- eval(rlang::call2(interface, "get_task"))
@@ -199,57 +199,15 @@ run_server_command <- function(x, task_obj) {
     task_obj <- get("task_obj", parent.frame())
     ongoing_tasks <- get("ongoing_tasks", parent.frame())
     results_obj <- list(task_id = task_obj$task_id,
-         output_value = ongoing_tasks,
-         keep_in_cloud = task_obj$keep_in_cloud)
+                        output_value = ongoing_tasks,
+                        keep_in_cloud = task_obj$keep_in_cloud)
     saveRDS(results_obj, file = paste0(configs_remete$tmpdir, "/", results_obj$task_id))
   }
   else {
     results_obj <- list(task_id = task_obj$task_id,
-         output_value = "<unknown command>",
-         keep_in_cloud = task_obj$keep_in_cloud)
+                        output_value = "<unknown command>",
+                        keep_in_cloud = task_obj$keep_in_cloud)
     saveRDS(results_obj, file = paste0(configs_remete$tmpdir, "/", results_obj$task_id))
   }
 }
-
-# #################### TESTING -----------
-# remete_server_session(interface = "interface_gdrive")
-# a = sample(1:100, size = 40)
-# b = sample(1:100, size = 40)
-#
-# out <- send_to_remote(rcorr(a, b, type = "spearman"), objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = FALSE)
-#
-# crnt_tasks <- send_to_remote("show_ongoing_tasks")
-
-
-# replace tibble-based ongoing tasks with an object!!!
-
-
-
-#
-#
-# kimeneti_objektum_1 <- send_to_remote(rcorr(a, b), objs = c("a", "b"), libs = c("Hmisc"), wait_for_result = FALSE)
-# load_result("js4ugyb7kk", "interface_gdrive", remove_from_cloud = FALSE)
-#
-#
-# ############### trying out a netmhcpan run
-# list.files("~/Dokumentumok/LABOR/SARS-CoV-2-immunoadaptation/netMHCpan-tools_functions/", full.names = TRUE) %>%
-#   extract(!grepl("db_playground", .)) %>% lapply(source)
-#
-# list.files("~/Dokumentumok/LABOR/SARS-CoV-2-immunoadaptation/netMHCpan-tools_functions/", full.names = TRUE) %>%
-#   extract(!grepl("db_playground", .)) %>% lapply(function(flnm) {
-#     x <- readLines(flnm)
-#     x[substr(x, 1, 7) == "library"] %>% gsub("library\\(", "", .) %>% gsub("\\)", "", .)
-#   }) %>% unlist()
-#
-# fnctns <- lsf.str() %>% as.vector()
-# peptides <- purrr::map_chr(1:1000, ~sample(rownames(protr::AABLOSUM100), 9, replace = TRUE) %>% paste0(collapse = ""))
-# alleles <- readLines("../SARS-CoV-2-immunoadaptation_data/alleles.txt")[1:32]
-#
-# recogn_matrix_rp <- send_to_remote(x = RunNetMHCpan4.0(alleles = alleles,
-#                                                        peptides = peptides,
-#                                                        type = "rp",
-#                                                        output_format = "wide",
-#                                                        threads = 32),
-#                objs = c(fnctns, "amino_acids", "peptides", "alleles", "configs"), libs = c("magrittr", "reshape2", "furrr", "parallel"))
-#
 

@@ -6,6 +6,8 @@ configs_remete <- rjson::fromJSON(file = "~/remete_configs.json")
 configs_remete$interface_file_task_dir <- "~/remete_tasks/"
 configs_remete$interface_file_result_dir <- "~/remete_results/"
 configs_remete$ongoing_processes_dir <- "~/remete_processes/"
+configs_remete$interface_gdrive_task_dir <- "remete_tasks/"
+configs_remete$interface_gdrive_result_dir <- "remete_results/"
 
 # INTERFACE ----------
 # interface_file: an interface for in-computer offline testing of the package
@@ -40,6 +42,45 @@ interface_file <- function(cmd, x) {
     file.remove(paste0(configs_remete$interface_file_result_dir, "/", x))
   }
 }
+
+# interface_gdrive: an interface for online task outsourcing using a Google Drive storage as a mediator
+interface_gdrive <- function(cmd, x) {
+  if(cmd == "send_task_package") {
+    return(googledrive::drive_upload(media = x, path = configs_remete$interface_gdrive_task_dir))
+  }
+  if(cmd == "check_task_packages") {
+    task_pkgs <- googledrive::drive_ls(path = configs_remete$interface_gdrive_task_dir)
+    return(ifelse(nrow(task_pkgs) > 0, 1, 0))
+  }
+  if(cmd == "list_task_packages") {
+    return(googledrive::drive_ls(path = configs_remete$interface_gdrive_task_dir)$name)
+  }
+  if(cmd == "get_task_package") {
+    googledrive::drive_download(file = paste0(configs_remete$interface_gdrive_task_dir, x),
+                                path = paste0(configs_remete$tmpdir, x),
+                                overwrite = TRUE)
+    return(paste0(configs_remete$tmpdir, "/", x))
+  }
+  if(cmd == "send_result_package") {
+    googledrive::drive_upload(media = paste0(configs_remete$tmpdir, "/", x),
+                              path = paste0(configs_remete$interface_gdrive_result_dir, x))
+  }
+  if(cmd == "list_result_packages") {
+    return(googledrive::drive_ls(path = configs_remete$interface_gdrive_result_dir))
+  }
+  if(cmd == "get_result_package") {
+    googledrive::drive_download(file = paste0(configs_remete$interface_file_result_dir, x),
+                                path = paste0(configs_remete$tmpdir, x),
+                                overwrite = TRUE)
+  }
+  if(cmd == "remove_task_package") {
+    googledrive::drive_rm(paste0(configs_remete$interface_gdrive_task_dir, x))
+  }
+  if(cmd == "remove_result_package") {
+    googledrive::drive_rm(paste0(configs_remete$interface_gdrive_result_dir, x))
+  }
+}
+
 
 # CLIENT ----------
 # GenerateTaskID: generates a task ID number
@@ -104,9 +145,10 @@ RunServer <- function(session_id = NULL, interface = "interface_file") {
       new_task <- eval(rlang::call2(interface, cmd = "check_task_packages"))
     } else  {
       # downloading the first task package
-      crnt_task <- eval(rlang::call2(interface, cmd = "list_task_packages"))[1] # THIS SHOULD BE REVIEWED SO AS TO MAKE THE FIRST IN THE ORDER REALLY THE FIRST
+      crnt_task <- eval(rlang::call2(interface, cmd = "list_task_packages"))[1]
       message(paste0(Sys.time(), " - received task ", crnt_task, ", evaluating."))
       task_package_path <- eval(rlang::call2(interface, cmd = "get_task_package", x = crnt_task))
+      task_package_name <- tail(unlist(strsplit(task_package_path, "/")), 1)
 
       # running the task package, adding process package to the processes directory, removing task package from the interface and the tmp directory
       callr::r(EvaluateTaskPackage, args = list(task_package_path, configs_remete))
@@ -114,7 +156,7 @@ RunServer <- function(session_id = NULL, interface = "interface_file") {
       eval(rlang::call2(interface, cmd = "remove_task_package", x = crnt_task))
 
       # sending the result package
-      eval(rlang::call2(interface, cmd = "send_result_package", x = paste0(configs_remete$tmpdir, "/", crnt_task)))
+      eval(rlang::call2(interface, cmd = "send_result_package", x = task_package_name))
 
       new_task <- FALSE
     }
@@ -126,42 +168,67 @@ EvaluateTaskPackage <- function(task_package_path, configs_remete) {
   lapply(task_package$libraries, function(x) {library(x, logical.return = TRUE, character.only = TRUE)})
   attach(task_package$objects)
   results_package <- list(task_id = task_package$task_id,
-                      output_value = evaluate::evaluate(task_package$expr, output_handler = evaluate::new_output_handler(value = identity), keep_warning = FALSE)[[2]])
+                          output_value = evaluate::evaluate(task_package$expr, output_handler = evaluate::new_output_handler(value = identity), keep_warning = FALSE)[[2]])
   save(results_package, file = paste0(configs_remete$tmpdir, "/", results_package$task_id))
 }
 
-# EXAMPLES -----------
-library(emhace.tools)
-load("../SARS-CoV-2-blindspot_data/selfsim_dissim_calculation/seqsims.RData")
-peps <- seqsims %>% names() %>% extract(1:1000)
-taskpack <- PackIn(RunNetMHCpan(alleles = c("HLA-A02:01", "HLA-A03:01"), peptides = peps,
-                                software_path = "/home/lhgergo/Programok/netMHCpan-4.1/netMHCpan", output_format = "wide"),
-                   objects = c("peps"),
-                   libraries = c("emhace.tools")) %>% SendAway(interface = "interface_file")
+# experimental asynchronous version of the remete server
+RunServerAsync <- function(session_id = NULL, interface = "interface_file") {
+  if(is.null(session_id)) session_id <- GenerateID(4)
+  new_task <- FALSE
 
-GetBack(taskpack, interface = "interface_file")
+  ongoing_tasks <- new.env(parent = emptyenv()) # an empty environment for future r_bg output objects
 
-taskpack2 <- PackIn(4 + 3,
-                    objects = c("peps"),
-                    libraries = c("emhace.tools")) %>% SendAway(interface = "interface_file")
+  while(TRUE) {
+    Sys.sleep(1)
+    if(!new_task) {
+      new_task <- eval(rlang::call2(interface, cmd = "check_task_packages"))
+    } else  {
+      # downloading the first task package
+      crnt_task <- eval(rlang::call2(interface, cmd = "list_task_packages"))[1]
+      message(paste0(Sys.time(), " - received task ", crnt_task, ", evaluating."))
+      task_package_path <- eval(rlang::call2(interface, cmd = "get_task_package", x = crnt_task))
 
-interface_file(cmd = "list_result_packages")
+      # running async evaluation
+      # TODO: crnt_task id should be given as a name to the r_bg output object in the list
+      assign(x = crnt_task, callr::r_bg(EvaluateTaskPackage, args = list(task_package_path, configs_remete)), envir = ongoing_tasks)
 
-GetBack(taskpack2)
+      # checking if any of the processes are ready
+      if(length(ongoing_tasks) > 0) {
+        lapply(ongoing_tasks, function(rbgobj) {
+          rbgobj$read_output_lines()
+        })
+      }
+      while(i == 0) {}
 
-ClearDirs <- function() {
-  c(list.files(configs_remete$interface_file_task_dir, full.names = TRUE),
-    list.files(configs_remete$interface_file_result_dir, full.names = TRUE),
-    list.files(configs_remete$tmpdir, full.names = TRUE)) %>% file.remove()
+      # eval(rlang::call2(interface, cmd = "remove_task_package", x = crnt_task))
+
+      # sending the result package
+      # eval(rlang::call2(interface, cmd = "send_result_package", x = paste0(configs_remete$tmpdir, "/", crnt_task)))
+
+      # new_task <- FALSE
+    }
+  }
 }
 
-ClearDirs()
+# v1.0 ----------
+# - kétkulcsos hitelesítés
 
-# A végleges v0.2 feltételei ----------
-# - BRC VPN/FTP interface megírása
-# - googledrive interface megírása
+# v0.4 ----------
 # - állapot-jelentések lehetővé tétele Discordra
+# - htop-szerű állapot-lekérdezés a gépről (foglalt szálak száma, szabad RAM stb.)
+# - megjegyezések hozzáfűzésének lehetősége a feladatokban
+# - BRC VPN/FTP interface megírása
+
+# v0.3 ----------
+# - folyamatok párhuzamos futtatásának lehetősége
+# - futó folyamatok lekérdezésének lehetősége
+# - ID alapján célozható legyen, pl. mely ws kapja a feladatot
 # - logó elkészítése
+
+# v0.2 ----------
+# - ne legyen szükség a teljes task_objectre a feladat lekérdezéséhez, elég legyen a task_id
+# - googledrive interface megírása -> PIPA
 
 # TODOs -----------
 # - lekérdezhető legyen, mely feladat-csomagokat ki küldte, mikor, és hol állnak a várólistában.

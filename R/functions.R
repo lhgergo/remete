@@ -18,6 +18,8 @@ require(future)
 # rjson::toJSON(configs_remete, indent = 1) %>% write("~/remete_configs.json")
 
 configs_remete <- rjson::fromJSON(file = "~/remete_configs.json")
+configs_remete$interface_file_task_dir <- "~/remete_tasks/"
+configs_remete$interface_file_results_dir <- "~/remete_results/"
 if(!file.exists(configs_remete$tmpdir)) dir.create(configs_remete$tmpdir)
 
 #################### CLIENT ----------
@@ -104,6 +106,42 @@ interface_gdrive <- function(cmd, obj = NULL, task_id = NULL) {
   }
   if(cmd == "remove_result") {
     googledrive::drive_rm(paste0(configs_remete$drive_results_dir, task_id))
+  }
+}
+
+# interface_file: all in one function for internal offline communication between a client and a server, running on the same computer
+interface_file <- function(cmd, obj = NULL, task_id = NULL) {
+  if(cmd == "send_task") {
+    tmppath <- paste0(configs_remete$tmpdir, "/", obj$task_id)
+    saveRDS(obj, file = tmppath)
+    return(file.copy(from = tmppath, to = configs_remete$interface_file_task_dir))
+  }
+  if(cmd == "check_tasks") {
+    task_pkgs <- list.files(configs_remete$interface_file_task_dir)
+    return(ifelse(length(task_pkgs) > 0, 1, 0))
+  }
+  if(cmd == "list_result_pkgs") {
+    return(list.files(configs_remete$interface_file_results_dir))
+  }
+  if(cmd == "get_task") {
+    newest_task_pkg_path <- list.files(configs_remete$interface_file_task_dir, full.names = TRUE)[1]
+    newest_task_pkg <- tail(unlist(strsplit(newest_task_pkg_path, "\\/")), 1)
+    return(file.copy(from =  newest_task_pkg_path, to = paste0(configs_remete$tmpdir, "/", newest_task_pkg[1]), overwrite = TRUE))
+  }
+  if(cmd == "send_result") {
+    tmppath <- paste0(configs_remete$tmpdir, "/", task_id)
+    return(file.copy(from = tmppath, to = configs_remete$interface_file_results_dir))
+  }
+  if(cmd == "get_result") {
+    result_pkgs_path <- list.files(configs_remete$drive_results_dir, full.names = TRUE)
+    result_pkgs <- tail(unlist(strsplit(result_pkgs_path, "\\/")), 1)
+    return(file.copy(from = result_pkgs_path, to = paste0(configs_remete$tmpdir, "/", result_pkgs), overwrite = TRUE))
+  }
+  if(cmd == "remove_task") {
+    file.remove(paste0(configs_remete$interface_file_task_dir, "/", task_id))
+  }
+  if(cmd == "remove_result") {
+    file.remove(paste0(configs_remete$interface_file_results_dir, "/", task_id))
   }
 }
 

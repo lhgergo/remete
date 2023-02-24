@@ -108,6 +108,10 @@ generate_interface_gdrive <- function(server_id, task_dir, result_dir, tmp_dir) 
     if(cmd == "remove_result_package") {
       googledrive::drive_rm(paste0(result_dir, x))
     }
+    if(cmr == "prepare_directories") {
+      googledrive::drive_mkdir(result_dir)
+      googledrive::drive_mkdir(task_dir)
+    }
   }
 }
 
@@ -166,8 +170,6 @@ GetBack <- function(task_package_info, interface = NULL, simplified_output = TRU
   } else {
     return(results_package$output_value)
   }
-
-
 }
 
 # SERVER ----------
@@ -201,6 +203,7 @@ RunServer <- function(interface) {
 
 EvaluateTaskPackage <- function(task_package_path, tmp_dir) {
   load(task_package_path)
+  file.remove(task_package_path)
   lapply(task_package$libraries, function(x) {library(x, logical.return = TRUE, character.only = TRUE)})
   attach(task_package$objects)
   results_package <- list(task_id = task_package$task_id,
@@ -209,43 +212,44 @@ EvaluateTaskPackage <- function(task_package_path, tmp_dir) {
 }
 
 # experimental asynchronous version of the remete server
-# # RunServerAsync <- function(session_id = NULL, interface = "interface_file") {
-#   if(is.null(session_id)) session_id <- GenerateID(4)
-#   new_task <- FALSE
-#
-#   ongoing_tasks <- new.env(parent = emptyenv()) # an empty environment for future r_bg output objects
-#
-#   while(TRUE) {
-#     Sys.sleep(1)
-#     if(!new_task) {
-#       new_task <- eval(rlang::call2(interface, cmd = "check_task_packages"))
-#     } else  {
-#       # downloading the first task package
-#       crnt_task <- eval(rlang::call2(interface, cmd = "list_task_packages"))[1]
-#       message(paste0(Sys.time(), " - received task ", crnt_task, ", evaluating."))
-#       task_package_path <- eval(rlang::call2(interface, cmd = "get_task_package", x = crnt_task))
-#
-#       # running async evaluation
-#       # TODO: crnt_task id should be given as a name to the r_bg output object in the list
-#       assign(x = crnt_task, callr::r_bg(EvaluateTaskPackage, args = list(task_package_path, configs_remete)), envir = ongoing_tasks)
-#
-#       # checking if any of the processes are ready
-#       if(length(ongoing_tasks) > 0) {
-#         lapply(ongoing_tasks, function(rbgobj) {
-#           rbgobj$read_output_lines()
-#         })
-#       }
-#       while(i == 0) {}
-#
-#       # eval(rlang::call2(interface, cmd = "remove_task_package", x = crnt_task))
-#
-#       # sending the result package
-#       # eval(rlang::call2(interface, cmd = "send_result_package", x = paste0(configs_remete$tmpdir, "/", crnt_task)))
-#
-#       # new_task <- FALSE
-#     }
-#   }
-# }
+RunServerAsync <- function(interface) {
+  new_task <- FALSE
+  ongoing_tasks <- list()
+  tmp_dir <- eval(rlang::call2(interface, cmd = "show_configuration"))["tmp_dir"]
+
+  while(TRUE) {
+    Sys.sleep(1)
+    if(!new_task) {
+      new_task <- eval(rlang::call2(interface, cmd = "check_task_packages"))
+
+      # checking what is the situation with ongoing tasks
+      if(length(ongoing_tasks) > 0) {
+        ready_tasks <- intersect(names(ongoing_tasks), list.files(tmp_dir))
+
+        if(length(ready_tasks) > 0) {
+          for (crnt_task in ready_tasks) {
+            message(paste0(Sys.time(), " - finished task ", crnt_task, "."))
+            eval(rlang::call2(interface, cmd = "send_result_package", x = crnt_task))
+            ongoing_tasks[[crnt_task]] <- NULL
+          }
+        }
+      }
+    } else  {
+      # downloading the first task package
+      crnt_task <- eval(rlang::call2(interface, cmd = "list_task_packages"))[1]
+      message(paste0(Sys.time(), " - received task ", crnt_task, ", evaluating."))
+      task_package_path <- eval(rlang::call2(interface, cmd = "get_task_package", x = crnt_task))
+      task_package_name <- tail(unlist(strsplit(task_package_path, "/")), 1)
+
+      # running the task package, adding process package to the processes directory, removing task package from the interface and the tmp directory
+      ongoing_tasks[[task_package_name]] <- callr::r_bg(EvaluateTaskPackage, args = list(task_package_path, tmp_dir))
+      eval(rlang::call2(interface, cmd = "remove_task_package", x = crnt_task))
+
+      new_task <- FALSE
+    }
+  }
+}
+
 
 # v1.0 ----------
 # - kétkulcsos hitelesítés

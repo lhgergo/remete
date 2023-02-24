@@ -1,14 +1,5 @@
 # Remete v0.2: complete reconceptualization of the package
 
-# CONFIGURATIONS ----------
-library(magrittr)
-configs_remete <- rjson::fromJSON(file = "~/remete_configs.json")
-configs_remete$interface_file_task_dir <- "~/remete_tasks/"
-configs_remete$interface_file_result_dir <- "~/remete_results/"
-configs_remete$ongoing_processes_dir <- "~/remete_processes/"
-configs_remete$interface_gdrive_task_dir <- "remete_tasks/"
-configs_remete$interface_gdrive_result_dir <- "remete_results/"
-
 # INTERFACE ----------
 # generate_interface_file: generates an interface for in-computer offline testing of the package
 generate_interface_file <- function(server_id, task_dir, result_dir, tmp_dir) {
@@ -153,7 +144,7 @@ SendOut <- function(task_pack, interface) {
 }
 
 # GetBack: gets the result back from the interface
-GetBack <- function(task_package_info, interface = NULL) {
+GetBack <- function(task_package_info, interface = NULL, simplified_output = TRUE) {
   if(is.null(interface)) interface <- task_package_info["interface"]
   eval(rlang::call2(interface, cmd = "get_result_package", x = task_package_info["task_id"]))
 
@@ -169,7 +160,14 @@ GetBack <- function(task_package_info, interface = NULL) {
   message(paste0("Result package for task ", results_package$task_id, " has been received."))
   eval(rlang::call2(interface, cmd = "remove_result_package", x = task_package_info["task_id"]))
   message(paste0("Result package for task ", results_package$task_id, " has been removed from the interface."))
-  return(results_package$output_value)
+
+  if(simplified_output) {
+    return(results_package$output_value[[length(results_package$output_value)]])
+  } else {
+    return(results_package$output_value)
+  }
+
+
 }
 
 # SERVER ----------
@@ -206,7 +204,7 @@ EvaluateTaskPackage <- function(task_package_path, tmp_dir) {
   lapply(task_package$libraries, function(x) {library(x, logical.return = TRUE, character.only = TRUE)})
   attach(task_package$objects)
   results_package <- list(task_id = task_package$task_id,
-                          output_value = evaluate::evaluate(task_package$expr, output_handler = evaluate::new_output_handler(value = identity), keep_warning = FALSE)[[2]])
+                          output_value = evaluate::evaluate(task_package$expr, output_handler = evaluate::new_output_handler(value = identity), keep_warning = FALSE))
   save(results_package, file = paste0(tmp_dir, "/", results_package$task_id))
 }
 

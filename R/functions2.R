@@ -62,8 +62,8 @@ interface_gdrive <- function(cmd, x) {
     return(paste0(configs_remete$tmpdir, "/", x))
   }
   if(cmd == "send_result_package") {
-    googledrive::drive_upload(media = paste0(configs_remete$tmpdir, "/", x),
-                              path = paste0(configs_remete$interface_gdrive_result_dir, x))
+    return(googledrive::drive_upload(media = paste0(configs_remete$tmpdir, "/", x),
+                                     path = paste0(configs_remete$interface_gdrive_result_dir, x)))
   }
   if(cmd == "list_result_packages") {
     return(googledrive::drive_ls(path = configs_remete$interface_gdrive_result_dir))

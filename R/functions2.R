@@ -2,6 +2,7 @@
 
 # INTERFACE ----------
 # generate_interface_file: generates an interface for in-computer offline testing of the package
+# IMPORTANT: generate_interace_file has not been updated for a while, has to be synchronized with the generate_interface_gdrive
 generate_interface_file <- function(server_id, task_dir, result_dir, tmp_dir) {
   server_id <- server_id
   task_dir <- task_dir
@@ -51,28 +52,32 @@ generate_interface_file <- function(server_id, task_dir, result_dir, tmp_dir) {
 }
 
 # generate_interface_gdrive: generates an interface for online task outsourcing using a Google Drive storage as a mediator
-generate_interface_gdrive <- function(server_id, task_dir, result_dir, tmp_dir) {
+generate_interface_gdrive <- function(server_id, task_dir, result_dir, file_dir, tmp_dir) {
   server_id <- server_id
   task_dir <- task_dir
   result_dir <- result_dir
+  file_dir <- file_dir
   tmp_dir <- tmp_dir
 
   task_dir <- paste0(task_dir, "_", server_id)
   result_dir <- paste0(result_dir, "_", server_id)
+  file_dir <- paste0(file_dir, "_", server_id)
 
   # initializing directories
   filesdf <- googledrive::drive_ls()
   if(!task_dir %in% filesdf$name) googledrive::drive_mkdir(name = task_dir, path = "")
   if(!result_dir %in% filesdf$name) googledrive::drive_mkdir(name = result_dir, path = "")
+  if(!file_dir %in% filesdf$name) googledrive::drive_mkdir(name = file_dir, path = "")
 
   task_dir <- paste0(task_dir, "/")
   result_dir <- paste0(result_dir, "/")
+  file_dir <- paste0(file_dir, "/")
   tmp_dir <- paste0(tmp_dir, "/")
 
 
   function(cmd, x) {
     if(cmd == "show_configuration") {
-      return(c(server_id = server_id, task_dir = task_dir, result_dir = result_dir, tmp_dir = tmp_dir))
+      return(c(server_id = server_id, task_dir = task_dir, result_dir = result_dir, file_dir = file_dir, tmp_dir = tmp_dir))
     }
     if(cmd == "send_task_package") {
       return(googledrive::drive_upload(media = x, path = task_dir))
@@ -108,9 +113,24 @@ generate_interface_gdrive <- function(server_id, task_dir, result_dir, tmp_dir) 
     if(cmd == "remove_result_package") {
       googledrive::drive_rm(paste0(result_dir, x))
     }
-    if(cmr == "prepare_directories") {
+    if(cmd == "prepare_directories") {
       googledrive::drive_mkdir(result_dir)
       googledrive::drive_mkdir(task_dir)
+    }
+    if(cmd == "send_file") {
+      return(googledrive::drive_upload(media = x, path = file_dir))
+    }
+    if(cmd == "get_file") {
+      dir.create(paste0(tmp_dir, file_dir), showWarnings = FALSE)
+      googledrive::drive_download(file = paste0(file_dir, x),
+                                  path = paste0(tmp_dir, file_dir, x),
+                                  overwrite = TRUE)
+    }
+    if(cmd == "remove_file") {
+      googledrive::drive_rm(paste0(file_dir, x))
+    }
+    if(cmd == "fetch_file") {
+      # to be coded: fetching file from the remote computer
     }
   }
 }
@@ -120,7 +140,7 @@ generate_interface_gdrive <- function(server_id, task_dir, result_dir, tmp_dir) 
 GenerateID <- function(n = 10) paste0(sample(c(0:9, letters), size = n, replace = TRUE), collapse = "")
 
 # PackIn: creates a task package with a unique identifier to be sent to the server
-PackIn <- function(expr, objects = NULL, files = NULL, libraries = NULL, task_id = NULL) {
+PackIn <- function(expr, objects = NULL, files = NULL, libraries = NULL, task_id = NULL, tmp_dir = "~/tmp/") {
   # preparing task id
   if(is.null(task_id)) task_id <- GenerateID(n = 4)
   crnt_timepoint <- gsub(" ", "-", Sys.time())
@@ -131,18 +151,28 @@ PackIn <- function(expr, objects = NULL, files = NULL, libraries = NULL, task_id
   expr <- rlang::enexpr(expr)
 
   objslist = if(!is.null(objects)) as.environment(mget(objects, envir = .GlobalEnv)) # creates object environment
-  task_package <- list(task_id = task_id, expr = expr, objects = objslist, libraries = libraries) # creates task object
+  task_package <- list(task_id = task_id, expr = expr, objects = objslist,
+                       files = files,
+                       libraries = libraries) # creates task object
 
-  task_package_path <- paste0(configs_remete$tmpdir, "/", task_id) # saves task package path on local computer
+  dir.create(tmp_dir, showWarnings = FALSE); task_package_path <- paste0(tmp_dir, task_id) # saves task package path on local computer
   save(task_package, file = task_package_path)
   return(c(task_id = task_id,
            task_package_path = task_package_path,
+           file_paths = paste0(files, collapse = ";"),
            target_session = NULL))
 }
 
 # SendOut: sends the newly created package via a chosen protocol to a remote serve
 SendOut <- function(task_pack, interface) {
   eval(rlang::call2(interface, cmd = "send_task_package", x = task_pack["task_package_path"]))
+
+  # sending files if any
+  if(task_pack["file_paths"] != "") {
+    file_paths <- unlist(strsplit(task_pack["file_paths"], ";"))
+    lapply(file_paths, \(crnt_path) eval(rlang::call2(interface, cmd = "send_file", x = crnt_path)))
+  }
+
   message(paste0("Task ", task_pack["task_id"]), " has been sent to ", interface)
   return(c(task_pack, interface = interface))
 }

@@ -74,7 +74,6 @@ generate_interface_gdrive <- function(server_id, task_dir, result_dir, file_dir,
   file_dir <- paste0(file_dir, "/")
   tmp_dir <- paste0(tmp_dir, "/")
 
-
   function(cmd, x) {
     if(cmd == "show_configuration") {
       return(c(server_id = server_id, task_dir = task_dir, result_dir = result_dir, file_dir = file_dir, tmp_dir = tmp_dir))
@@ -126,12 +125,6 @@ generate_interface_gdrive <- function(server_id, task_dir, result_dir, file_dir,
                                   path = paste0(tmp_dir, file_dir, x),
                                   overwrite = TRUE)
     }
-    if(cmd == "remove_file") {
-      googledrive::drive_rm(paste0(file_dir, x))
-    }
-    if(cmd == "fetch_file") {
-      # to be coded: fetching file from the remote computer
-    }
   }
 }
 
@@ -140,7 +133,7 @@ generate_interface_gdrive <- function(server_id, task_dir, result_dir, file_dir,
 GenerateID <- function(n = 10) paste0(sample(c(0:9, letters), size = n, replace = TRUE), collapse = "")
 
 # PackIn: creates a task package with a unique identifier to be sent to the server
-PackIn <- function(expr, objects = NULL, files = NULL, libraries = NULL, task_id = NULL, tmp_dir = "~/tmp/") {
+PackIn <- function(expr, objects = NULL, libraries = NULL, task_id = NULL, tmp_dir = "~/tmp/") {
   # preparing task id
   if(is.null(task_id)) task_id <- GenerateID(n = 4)
   crnt_timepoint <- gsub(" ", "-", Sys.time())
@@ -152,28 +145,19 @@ PackIn <- function(expr, objects = NULL, files = NULL, libraries = NULL, task_id
 
   objslist = if(!is.null(objects)) as.environment(mget(objects, envir = .GlobalEnv)) # creates object environment
   task_package <- list(task_id = task_id, expr = expr, objects = objslist,
-                       files = files,
                        libraries = libraries) # creates task object
 
   dir.create(tmp_dir, showWarnings = FALSE); task_package_path <- paste0(tmp_dir, task_id) # saves task package path on local computer
   save(task_package, file = task_package_path)
   return(c(task_id = task_id,
            task_package_path = task_package_path,
-           file_paths = paste0(files, collapse = ";"),
            target_session = NULL))
 }
 
 # SendOut: sends the newly created package via a chosen protocol to a remote serve
 SendOut <- function(task_pack, interface) {
   eval(rlang::call2(interface, cmd = "send_task_package", x = task_pack["task_package_path"]))
-
-  # sending files if any
-  if(task_pack["file_paths"] != "") {
-    file_paths <- unlist(strsplit(task_pack["file_paths"], ";"))
-    lapply(file_paths, \(crnt_path) eval(rlang::call2(interface, cmd = "send_file", x = crnt_path)))
-  }
-
-  message(paste0("Task ", task_pack["task_id"]), " has been sent to ", interface)
+  message(paste0("Task ", task_pack["task_id"]), " has been sent.")
   return(c(task_pack, interface = interface))
 }
 
@@ -182,15 +166,16 @@ GetBack <- function(task_package_info, interface = NULL, simplified_output = TRU
   if(is.null(interface)) interface <- task_package_info["interface"]
   eval(rlang::call2(interface, cmd = "get_result_package", x = task_package_info["task_id"]))
 
+  tmpdf <- interface("show_configuration")["tmp_dir"]
   # waiting for the arrival of result package
   Sys.sleep(1)
-  result_received <- task_package_info["task_id"] %in% list.files(configs_remete$tmpdir)
+  result_received <- task_package_info["task_id"] %in% list.files(tmpdf)
   while(!result_received) {
     Sys.sleep(1)
-    result_received <- task_package_info["task_id"] %in% list.files(configs_remete$tmpdir)
+    result_received <- task_package_info["task_id"] %in% list.files(tmpdf)
   }
 
-  load(paste0(configs_remete$tmpdir, "/", task_package_info["task_id"]))
+  load(paste0(tmpdf, "/", task_package_info["task_id"]))
   message(paste0("Result package for task ", results_package$task_id, " has been received."))
   eval(rlang::call2(interface, cmd = "remove_result_package", x = task_package_info["task_id"]))
   message(paste0("Result package for task ", results_package$task_id, " has been removed from the interface."))
@@ -201,6 +186,19 @@ GetBack <- function(task_package_info, interface = NULL, simplified_output = TRU
     return(results_package$output_value)
   }
 }
+
+
+# SendFile: transfers a file from a targetted site on the remote computer
+SendFile <- function(from, to, interface, tmp_dir = "~/tmp/") {
+  # sending file to the interface
+  eval(rlang::call2(interface, cmd = "send_file", x = from))
+
+  # creating a targetting label, uploading it also
+  write(to, file = paste0(tmpdir, ))
+  eval(rlang::call2(interface, cmd = "send_file", x = from))
+}
+
+
 
 # SERVER ----------
 RunServer <- function(interface) {

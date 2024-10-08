@@ -19,14 +19,10 @@ load_result("2umaacdooj")
 send_to_remote({
   a <- c(1:10)
   b <- c(91:100)
-  Hmiss::rcorr(a, b)
-}, wait_for_result = TRUE)
-
-send_to_remote({
-  install.packages("abglassow")
-}, wait_for_result = TRUE)
-
-
+  corrobj <- rcorr(a, b)
+  ggplot(data.frame(a = a, b = b)) + geom_point(aes(x = a, y = b)) +
+    ggtitle(label = "abc", subtitle = paste0("r=", format(digits = 3)), " p=", format(digits = 3))
+}, wait_for_result = TRUE, libs = c("ggplot2", "Hmisc"))
 
 # ############### trying out a netmhcpan run
 list.files("~/Dokumentumok/LABOR/SARS-CoV-2-immunoadaptation/netMHCpan-tools_functions/", full.names = TRUE) %>%

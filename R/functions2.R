@@ -15,8 +15,8 @@ generate_interface_file <- function(server_id, task_dir, result_dir, tmp_dir) {
     } else {
       task_dir <- paste0(task_dir, "/", server_id, "/")
       result_dir <- paste0(result_dir, "/", server_id, "/")
-      dir.create(task_dir)
-      dir.create(result_dir)
+      dir.create(task_dir, recursive = T)
+      dir.create(result_dir, recursive = T)
     }
 
     if(cmd == "send_task_package") {
@@ -31,7 +31,7 @@ generate_interface_file <- function(server_id, task_dir, result_dir, tmp_dir) {
     }
     if(cmd == "get_task_package") {
       file.copy(from = paste0(task_dir, "/", x), to = tmp_dir)
-      return(paste0(configs_remete$tmpdir, "/", x))
+      return(paste0(tmp_dir, "/", x))
     }
     if(cmd == "send_result_package") {
       return(file.copy(from = x, to = result_dir))
@@ -120,7 +120,7 @@ generate_interface_gdrive <- function(server_id, task_dir, result_dir, file_dir,
       return(googledrive::drive_upload(media = x, path = file_dir))
     }
     if(cmd == "get_file") {
-      dir.create(paste0(tmp_dir, file_dir), showWarnings = FALSE)
+      dir.create(paste0(tmp_dir, file_dir), showWarnings = FALSE, recursive = T)
       googledrive::drive_download(file = paste0(file_dir, x),
                                   path = paste0(tmp_dir, file_dir, x),
                                   overwrite = TRUE)
@@ -147,7 +147,7 @@ PackIn <- function(expr, objects = NULL, libraries = NULL, task_id = NULL, tmp_d
   task_package <- list(task_id = task_id, expr = expr, objects = objslist,
                        libraries = libraries) # creates task object
 
-  dir.create(tmp_dir, showWarnings = FALSE); task_package_path <- paste0(tmp_dir, task_id) # saves task package path on local computer
+  dir.create(tmp_dir, showWarnings = FALSE, recursive = T); task_package_path <- paste0(tmp_dir, task_id) # saves task package path on local computer
   save(task_package, file = task_package_path)
   return(c(task_id = task_id,
            task_package_path = task_package_path,
@@ -194,7 +194,7 @@ SendFile <- function(from, to, interface, tmp_dir = "~/tmp/") {
   eval(rlang::call2(interface, cmd = "send_file", x = from))
 
   # creating a targetting label, uploading it also
-  write(to, file = paste0(tmpdir, ))
+  write(to, file = paste0(tmpdir))
   eval(rlang::call2(interface, cmd = "send_file", x = from))
 }
 

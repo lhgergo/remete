@@ -277,36 +277,3 @@ RunServerAsync <- function(interface) {
     }
   }
 }
-
-
-# v1.0 ----------
-# - kétkulcsos hitelesítés
-
-# v0.4 ----------
-# - állapot-jelentések lehetővé tétele Discordra
-# - htop-szerű állapot-lekérdezés a gépről (foglalt szálak száma, szabad RAM stb.)
-# - megjegyezések hozzáfűzésének lehetősége a feladatokban
-# - BRC VPN/FTP interface megírása
-
-# v0.3 ----------
-# - folyamatok párhuzamos futtatásának lehetősége
-# - futó folyamatok lekérdezésének lehetősége
-# - ID alapján célozható legyen, pl. mely ws kapja a feladatot
-# - logó elkészítése
-
-# v0.2 ----------
-# - ne legyen szükség a teljes task_objectre a feladat lekérdezéséhez, elég legyen a task_id
-# - googledrive interface megírása -> PIPA
-
-# TODOs -----------
-# - lekérdezhető legyen, mely feladat-csomagokat ki küldte, mikor, és hol állnak a várólistában.
-# - indítható legyen új szerver távolról!
-# - VPN/FTP (BRC network) támogatás kidolgozása
-# - GetBack: összepipeolhatóvá kellene tenni a SendAway-jel.
-# - EGYELŐRE EBBEN A VERZIÓBAN NEM LESZ MULTITASKING KEZELÉS! de ha lesz, azt a callr:r_bg függvényével fogjuk megcsinálni, és a futó folyamatokat objektumokként mentjük majd ki.
-# - ellenőriznie kell a szervernek, hogy vajon az elindított folyamat miért nem adott resultot: errorral végződött? -> a procobjokat is mentegessük valahova, hogy ezeket vissza lehessen kérdezni? -> ez lehetne a feladatkezelő alapja?
-
-# PIPA ----------
-# - A szerver nyomon tudja követni, melyik feladat mikor érkezett be. Ehhez lehet jobb lenne, ha a random jel mellett még egy időcímke is járna a package-knek.
-# - GetBack függvény: ezt még át kell azért gondolni
-# - az elkészült feladatot el kell távolítani a taskok közül, hogy a következőre tudjon lépni

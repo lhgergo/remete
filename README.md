@@ -1,4 +1,4 @@
-# remete: an R package for easy task delegation to remote computers
+# remete: an R package for easy-to-use task delegation to remote computers
 The aim of the project is to create a modular, R-based framework to easily send (mainly resource-heavy) tasks in R to remote workstations from client computers with lower amounts of resources (e.g. laptops, tablets). 
 
 Note: `remete` is still under heavy development, both the underlying code and the syntax is a subject for further changes. 

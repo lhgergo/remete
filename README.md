@@ -48,6 +48,9 @@ taskobj <- filter(iris, Sepal.Length > 4 & Sepal.Length < 4.5) |>
 # attempting to get back results
 GetBack(taskobj, interface = ifobj_gdrive)
 ```
+![kép](https://github.com/user-attachments/assets/25e2a678-529c-4932-972c-e48de650b656)
+![kép](https://github.com/user-attachments/assets/637a16e3-2849-4c0b-9918-fb1e6f36a555)
+
 
 
 

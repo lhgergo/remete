@@ -3,14 +3,14 @@ The aim of the project is to create a modular, R-based framework to easily send 
 
 Note: `remete` is still under heavy development, both the underlying code and the syntax is a subject for further changes. 
 
-# Setup
+# Installing
 You can install the package itself using the following command:
 
 ```
 devtools::install_github("lhgergo/remete")
 ```
 
-# Usage
+# Getting started
 In this section I present a step-by-step introduction for running a remete server and sending tasks to it from a client machine.
 
 Note, that as of now (9th October, 2024), only Google Drive-based task transfer is ready. Please make sure that you have `googledrive` (https://googledrive.tidyverse.org/) package installed in R. I would like to implement further "protocols" later.
@@ -48,9 +48,9 @@ taskobj <- filter(iris, Sepal.Length > 4 & Sepal.Length < 4.5) |>
 # attempting to get back results
 GetBack(taskobj, interface = ifobj_gdrive)
 ```
+
+The following screenshots show the process of sending a task to the server in RStudio:
 ![kép](https://github.com/user-attachments/assets/25e2a678-529c-4932-972c-e48de650b656)
+
+And this is how getting the results back looks like:
 ![kép](https://github.com/user-attachments/assets/637a16e3-2849-4c0b-9918-fb1e6f36a555)
-
-
-
-

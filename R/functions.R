@@ -156,8 +156,11 @@ PackIn <- function(expr, objects = NULL, libraries = NULL, task_id = NULL, tmp_d
 
 # SendOut: sends the newly created package via a chosen protocol to a remote serve
 SendOut <- function(task_pack, interface) {
+  # sending task package through the interface
   eval(rlang::call2(interface, cmd = "send_task_package", x = task_pack["task_package_path"]))
   message(paste0("Task ", task_pack["task_id"]), " has been sent.")
+
+  # returning local task package
   return(c(task_pack, interface = interface))
 }
 
@@ -272,6 +275,10 @@ RunServerAsync <- function(interface) {
       # running the task package, adding process package to the processes directory, removing task package from the interface and the tmp directory
       ongoing_tasks[[task_package_name]] <- callr::r_bg(EvaluateTaskPackage, args = list(task_package_path, tmp_dir))
       eval(rlang::call2(interface, cmd = "remove_task_package", x = crnt_task))
+
+
+
+
 
       new_task <- FALSE
     }

@@ -276,10 +276,6 @@ RunServerAsync <- function(interface) {
       ongoing_tasks[[task_package_name]] <- callr::r_bg(EvaluateTaskPackage, args = list(task_package_path, tmp_dir))
       eval(rlang::call2(interface, cmd = "remove_task_package", x = crnt_task))
 
-
-
-
-
       new_task <- FALSE
     }
   }

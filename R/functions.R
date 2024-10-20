@@ -52,27 +52,18 @@ generate_interface_file <- function(server_id, task_dir, result_dir, tmp_dir) {
 }
 
 # generate_interface_gdrive: generates an interface for online task outsourcing using a Google Drive storage as a mediator
-generate_interface_gdrive <- function(server_id, task_dir, result_dir, file_dir, tmp_dir) {
-  server_id <- server_id
-  task_dir <- task_dir
-  result_dir <- result_dir
-  file_dir <- file_dir
-  tmp_dir <- tmp_dir
-
-  task_dir <- paste0(task_dir, "_", server_id)
-  result_dir <- paste0(result_dir, "_", server_id)
-  file_dir <- paste0(file_dir, "_", server_id)
-
+generate_interface_gdrive <- function(server_id, task_dir = "tasks", result_dir = "results", file_dir = "files", tmp_dir) {
   # initializing directories
   filesdf <- googledrive::drive_ls()
-  if(!task_dir %in% filesdf$name) googledrive::drive_mkdir(name = task_dir, path = "")
-  if(!result_dir %in% filesdf$name) googledrive::drive_mkdir(name = result_dir, path = "")
-  if(!file_dir %in% filesdf$name) googledrive::drive_mkdir(name = file_dir, path = "")
+  if(!server_id %in% filesdf$name) googledrive::drive_mkdir(name = server_id, path = "")
+  if(!task_dir %in% filesdf$name) googledrive::drive_mkdir(name = task_dir, path = paste0(server_id, "/"))
+  if(!result_dir %in% filesdf$name) googledrive::drive_mkdir(name = result_dir, path = paste0(server_id, "/"))
+  if(!file_dir %in% filesdf$name) googledrive::drive_mkdir(name = file_dir, path = paste0(server_id, "/"))
 
-  task_dir <- paste0(task_dir, "/")
-  result_dir <- paste0(result_dir, "/")
-  file_dir <- paste0(file_dir, "/")
-  tmp_dir <- paste0(tmp_dir, "/")
+  task_dir %<>% paste0("/")
+  result_dir %<>% paste0("/")
+  file_dir %<>% paste0("/")
+  tmp_dir %<>%paste0("/")
 
   function(cmd, x) {
     if(cmd == "show_configuration") {

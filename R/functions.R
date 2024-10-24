@@ -5,13 +5,19 @@
 generate_interface_gdrive <- function(server_id, task_dir = "tasks", result_dir = "results", file_dir = "files",
                                       notifications_dir = "notifications", tmp_dir) {
 
+  # complementing the temporary directory paths to ensure their correct ending
+  tmp_dir_lngth  <- nchar(tmp_dir)
+  if(substr(tmp_dir, tmp_dir_lngth, tmp_dir_lngth) != "/") {tmp_dir <- paste0(tmp_dir, "/")}
+
   # initializing directories
   filesdf <- googledrive::drive_ls()
   if(!server_id %in% filesdf$name) googledrive::drive_mkdir(name = server_id, path = "")
-  if(!task_dir %in% filesdf$name) googledrive::drive_mkdir(name = task_dir, path = paste0(server_id, "/"))
-  if(!result_dir %in% filesdf$name) googledrive::drive_mkdir(name = result_dir, path = paste0(server_id, "/"))
-  if(!file_dir %in% filesdf$name) googledrive::drive_mkdir(name = file_dir, path = paste0(server_id, "/"))
-  if(!notifications_dir %in% filesdf$name) googledrive::drive_mkdir(name = notifications_dir, path = paste0(server_id, "/"))
+
+  filesdf_serverid <- googledrive::drive_ls(path = paste0(server_id, "/"))
+  if(!task_dir %in% filesdf_serverid$name) googledrive::drive_mkdir(name = task_dir, path = paste0(server_id, "/"))
+  if(!result_dir %in% filesdf_serverid$name) googledrive::drive_mkdir(name = result_dir, path = paste0(server_id, "/"))
+  if(!file_dir %in% filesdf_serverid$name) googledrive::drive_mkdir(name = file_dir, path = paste0(server_id, "/"))
+  if(!notifications_dir %in% filesdf_serverid$name) googledrive::drive_mkdir(name = notifications_dir, path = paste0(server_id, "/"))
 
   task_dir <- paste0(server_id, "/", task_dir, "/")
   result_dir <- paste0(server_id, "/", result_dir, "/")

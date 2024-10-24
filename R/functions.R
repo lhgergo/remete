@@ -1,69 +1,22 @@
 # Remete v0.2: complete reconceptualization of the package
 
 # INTERFACE ----------
-# generate_interface_file: generates an interface for in-computer offline testing of the package
-# IMPORTANT: generate_interace_file has not been updated for a while, has to be synchronized with the generate_interface_gdrive
-generate_interface_file <- function(server_id, task_dir, result_dir, tmp_dir) {
-  server_id <- server_id
-  task_dir <- task_dir
-  result_dir <- result_dir
-  tmp_dir <- tmp_dir
-
-  function(cmd, x = NULL) {
-    if(cmd == "show_configuration") {
-      return(c(server_id = server_id, task_dir = task_dir, result_dir = result_dir, tmp_dir = tmp_dir))
-    } else {
-      task_dir <- paste0(task_dir, "/", server_id, "/")
-      result_dir <- paste0(result_dir, "/", server_id, "/")
-      dir.create(task_dir, recursive = T)
-      dir.create(result_dir, recursive = T)
-    }
-
-    if(cmd == "send_task_package") {
-      return(file.copy(from = x, to = task_dir))
-    }
-    if(cmd == "check_task_packages") {
-      task_pkgs <- list.files(task_dir)
-      return(ifelse(length(task_pkgs) > 0, 1, 0))
-    }
-    if(cmd == "list_task_packages") {
-      return(list.files(task_dir))
-    }
-    if(cmd == "get_task_package") {
-      file.copy(from = paste0(task_dir, "/", x), to = tmp_dir)
-      return(paste0(tmp_dir, "/", x))
-    }
-    if(cmd == "send_result_package") {
-      return(file.copy(from = x, to = result_dir))
-    }
-    if(cmd == "list_result_packages") {
-      return(list.files(result_dir))
-    }
-    if(cmd == "get_result_package") {
-      file.copy(from = paste0(result_dir, "/", x), to = tmp_dir)
-    }
-    if(cmd == "remove_task_package") {
-      file.remove(paste0(task_dir, "/", x))
-    }
-    if(cmd == "remove_result_package") {
-      file.remove(paste0(result_dir, "/", x))
-    }
-  }
-}
-
 # generate_interface_gdrive: generates an interface for online task outsourcing using a Google Drive storage as a mediator
-generate_interface_gdrive <- function(server_id, task_dir = "tasks", result_dir = "results", file_dir = "files", tmp_dir) {
+generate_interface_gdrive <- function(server_id, task_dir = "tasks", result_dir = "results", file_dir = "files",
+                                      notifications_dir = "notifications", tmp_dir) {
+
   # initializing directories
   filesdf <- googledrive::drive_ls()
   if(!server_id %in% filesdf$name) googledrive::drive_mkdir(name = server_id, path = "")
   if(!task_dir %in% filesdf$name) googledrive::drive_mkdir(name = task_dir, path = paste0(server_id, "/"))
   if(!result_dir %in% filesdf$name) googledrive::drive_mkdir(name = result_dir, path = paste0(server_id, "/"))
   if(!file_dir %in% filesdf$name) googledrive::drive_mkdir(name = file_dir, path = paste0(server_id, "/"))
+  if(!notifications_dir %in% filesdf$name) googledrive::drive_mkdir(name = notifications_dir, path = paste0(server_id, "/"))
 
-  task_dir %<>% paste0("/")
-  result_dir %<>% paste0("/")
-  file_dir %<>% paste0("/")
-  tmp_dir %<>%paste0("/")
+  task_dir <- paste0(server_id, "/", task_dir, "/")
+  result_dir <- paste0(server_id, "/", result_dir, "/")
+  file_dir <- paste0(server_id, "/", file_dir, "/")
+  notifications_dir <- paste0(server_id, "/", notifications_dir, "/")
 
   function(cmd, x) {
     if(cmd == "show_configuration") {
@@ -85,6 +38,14 @@ generate_interface_gdrive <- function(server_id, task_dir = "tasks", result_dir 
                                   overwrite = TRUE)
       return(paste0(tmp_dir, "/", x))
     }
+    if(cmd == "get_notification") {
+      tryCatch({googledrive::drive_download(file = paste0(notifications_dir, x),
+                                            path = paste0(tmp_dir, x),
+                                            overwrite = TRUE)},
+               error = \(msg) {return(FALSE)})
+      return(paste0(tmp_dir, "/", x))
+    }
+
     if(cmd == "send_result_package") {
       return(googledrive::drive_upload(media = paste0(tmp_dir, "/", x),
                                        path = paste0(result_dir, x)))
@@ -146,10 +107,21 @@ PackIn <- function(expr, objects = NULL, libraries = NULL, task_id = NULL, tmp_d
 }
 
 # SendOut: sends the newly created package via a chosen protocol to a remote serve
-SendOut <- function(task_pack, interface) {
+SendOut <- function(task_pack, interface, wait_confirmation = TRUE) {
   # sending task package through the interface
   eval(rlang::call2(interface, cmd = "send_task_package", x = task_pack["task_package_path"]))
   message(paste0("Task ", task_pack["task_id"]), " has been sent.")
+
+  # waiting for the confirmation from the server that the task package is accepted
+  if(wait_confirmation) {
+    notification_file_path <- paste0(task_pack["task_package_path"], "_notif")
+    for(i in 1:5) {
+      output <- eval(rlang::call2(interface, cmd = "get_notification", x = notification_file_path))
+      if(output != FALSE) {break}
+      Sys.sleep(5)
+    }
+  }
+
 
   # returning local task package
   return(c(task_pack, interface = interface))

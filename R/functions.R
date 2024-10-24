@@ -107,7 +107,7 @@ PackIn <- function(expr, objects = NULL, libraries = NULL, task_id = NULL, tmp_d
 }
 
 # SendOut: sends the newly created package via a chosen protocol to a remote serve
-SendOut <- function(task_pack, interface, wait_confirmation = TRUE) {
+SendOut <- function(task_pack, interface, wait_confirmation = FALSE) {
   # sending task package through the interface
   eval(rlang::call2(interface, cmd = "send_task_package", x = task_pack["task_package_path"]))
   message(paste0("Task ", task_pack["task_id"]), " has been sent.")
@@ -121,7 +121,6 @@ SendOut <- function(task_pack, interface, wait_confirmation = TRUE) {
       Sys.sleep(5)
     }
   }
-
 
   # returning local task package
   return(c(task_pack, interface = interface))

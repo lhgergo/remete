@@ -219,7 +219,7 @@ RunServerAsync <- function(interface) {
   while(TRUE) {
     Sys.sleep(1)
     if(!new_task) {
-      new_task <- eval(rlang::call2(interface, cmd = "check_task_packages"))
+      retry::retry(new_task <- eval(rlang::call2(interface, cmd = "check_task_packages")), when = "error", interval = 3)
 
       # checking what is the situation with ongoing tasks
       if(length(ongoing_tasks) > 0) {

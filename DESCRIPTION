@@ -17,4 +17,5 @@ Imports:
     evaluate,
     tibble,
     rjson,
-    future
+    future,
+    retry
